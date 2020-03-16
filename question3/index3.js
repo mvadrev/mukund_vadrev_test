@@ -130,4 +130,4 @@ app.post("/addnodelocations", function(req, res) {
   nodes_locations;
 });
 
-var server = app.listen(3004, console.log("Listening on port 3004"));
+var server = app.listen(3003, console.log("Listening on port 3003"));

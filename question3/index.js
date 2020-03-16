@@ -1,25 +1,13 @@
-// This Node.js server is for a single node
-// There maybe multiple autonomous nodes
-// A user here for example selects from a list 'choices', cache_size = 3
-// Everytime a value is selected by the user from the list, the program checks if the key is already present in the cache object
-// If value is there then shift position by -1 else insert to the top of the row by deleting the element with last index
-// There is atleast 1 central node and one or more edge locations
-// API requests from client side are always placed to the central node.
-// The request takes in a location object and choice from the choices array
-// Depending on distance, the nearest node will reply back to the client
-// It will also check the stack object to see if the same choice is present and if the stack if full
-// Accordingly, it updates the stack
-// The node will also send a post request with the current stack to all other nodes to be updated
-// A central list of all nodes is kept in both central and sec nodes
-// in case client API request results in error, api request to next nearest node is placed if promise is not returned (Automatic concurrent failover)
-
 const express = require("express");
 const app = express();
 const axios = require("axios");
+var cors = require("cors");
 var bodyParser = require("body-parser");
 const querystring = require("querystring");
+var socket = require("socket.io");
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
+app.use(cors());
 
 //Set base URL
 base_url = "http://localhost:";
@@ -33,19 +21,32 @@ cache_validity = 60;
 
 // Nodes list
 nodes_list = ["3001/hello", "3002/hello", "3003/hello"];
+node_location = [
+  { x: "200", y: "200" },
+  { x: "300", y: "500" },
+  { x: "400", y: "500" }
+];
 
 // Initially set cache empty array
 let lru_cache = [];
 
-// Helper Functions
+client_location = [];
 
-const replicateDatainAllNodes = () => {};
+let cache_interval;
 
-const AutoFailOverConnect = () => {};
+function setCacheInterval() {
+  cache_interval = setInterval(function() {
+    lru_cache = [];
+    console.log("Cache cleared. To change interval change line 41", lru_cache);
+  }, 60000);
+}
 
-const chechCacheValidity = () => {
-  return validity;
-};
+setCacheInterval();
+
+// TImer code to delete cache
+
+let d = 0;
+let scores = [];
 
 // GET API for current lru_cache object
 app.get("/current_lru_cache", function(req, res) {
@@ -61,7 +62,8 @@ app.post("/request", function(req, res) {
   let movie_name = req.body.movie_name;
   console.log(req.body.movie_name);
 
-  let location = req.body.location;
+  client_location = req.body.location;
+  console.log("The request location is", client_location.x);
   const cache_index = lru_cache.indexOf(movie_name);
   console.log(cache_index);
   console.log(lru_cache);
@@ -77,6 +79,8 @@ app.post("/request", function(req, res) {
   }
   console.log(lru_cache);
 
+  clearInterval(cache_interval);
+  setCacheInterval();
   for (let i = 0; i < nodes_list.length; i++) {
     console.log("printing", base_url.concat(nodes_list[i]));
     axios
@@ -93,14 +97,39 @@ app.post("/request", function(req, res) {
       });
   }
 
-  res.send("success");
+  // Calculate closest node
+  for (let i = 0; i < node_location.length; i++) {
+    let x = parseInt(node_location[i].x);
+    console.log("The x coordinate is", x);
+    let y = parseInt(node_location[i].y);
+    console.log("The y coordinate is", y);
+    d = (x - parseInt(client_location.x)) / (y - parseInt(client_location.y));
+    console.log("The distance is", d);
+    scores.push(d);
+  }
+  console.log(scores);
+  let index_of_min = scores.indexOf(Math.min(...scores));
+  console.log("The index of the closest ndoe is", index_of_min);
+  console.log("Client frontend can now contact this ndoe and downlaod cache");
+  res.send(nodes_list[index_of_min]);
 });
 
 app.post("/hello", function(req, res) {
   lru_cache = req.body.cache;
   console.log("updated cache is", lru_cache);
-  console.log(lru_cache.type);
+
+  clearInterval(cache_interval);
+  setCacheInterval();
   res.send(req.body);
 });
 
-app.listen(3000, console.log("Listening on port 3000"));
+// Post list of nodes
+app.post("/addnodeslist", function(req, res) {
+  nodes_list = req.body.nodes;
+});
+
+app.post("/addnodelocations", function(req, res) {
+  nodes_locations;
+});
+
+var server = app.listen(3000, console.log("Listening on port 3000"));
