@@ -1,18 +1,3 @@
-// This Node.js server is for a single node
-// There maybe multiple autonomous nodes
-// A user here for example selects from a list 'choices', cache_size = 3
-// Everytime a value is selected by the user from the list, the program checks if the key is already present in the cache object
-// If value is there then shift position by -1 else insert to the top of the row by deleting the element with last index
-// There is atleast 1 central node and one or more edge locations
-// API requests from client side are always placed to the central node.
-// The request takes in a location object and choice from the choices array
-// Depending on distance, the nearest node will reply back to the client
-// It will also check the stack object to see if the same choice is present and if the stack if full
-// Accordingly, it updates the stack
-// The node will also send a post request with the current stack to all other nodes to be updated
-// A central list of all nodes is kept in both central and sec nodes
-// in case client API request results in error, api request to next nearest node is placed if promise is not returned (Automatic concurrent failover)
-
 const express = require("express");
 const app = express();
 const axios = require("axios");
@@ -37,7 +22,7 @@ cache_validity = 60;
 // Nodes list
 nodes_list = ["3001/hello", "3002/hello", "3003/hello"];
 node_location = [
-  { x: "200", y: "500" },
+  { x: "200", y: "200" },
   { x: "300", y: "500" },
   { x: "400", y: "500" }
 ];
@@ -46,6 +31,19 @@ node_location = [
 let lru_cache = [];
 
 client_location = [];
+
+let cache_interval;
+
+function setCacheInterval() {
+  cache_interval = setInterval(function() {
+    lru_cache = [];
+    console.log("Cache cleared. To change interval change line 41", lru_cache);
+  }, 6000);
+}
+
+setCacheInterval();
+
+// TImer code to delete cache
 
 let d = 0;
 let scores = [];
@@ -95,29 +93,31 @@ app.post("/request", function(req, res) {
         console.log("err is" + err);
         console.log(err.message);
       });
-
-    // Calculate closest node
-    for (let i = 0; i < node_location.length; i++) {
-      let x = parseInt(node_location[i].x);
-      console.log("The x coordinate is", x);
-      let y = parseInt(node_location[i].y);
-      console.log("The y coordinate is", y);
-      d = (x - parseInt(client_location.x)) / (y - parseInt(client_location.y));
-      console.log("The distance is", d);
-      scores.push(d);
-    }
-    console.log(scores);
-    let index_of_min = scores.indexOf(String(Math.min(d)));
-    console.log("The index of min is", index_of_min);
   }
 
-  res.send("success");
+  // Calculate closest node
+  for (let i = 0; i < node_location.length; i++) {
+    let x = parseInt(node_location[i].x);
+    console.log("The x coordinate is", x);
+    let y = parseInt(node_location[i].y);
+    console.log("The y coordinate is", y);
+    d = (x - parseInt(client_location.x)) / (y - parseInt(client_location.y));
+    console.log("The distance is", d);
+    scores.push(d);
+  }
+  console.log(scores);
+  let index_of_min = scores.indexOf(Math.min(...scores));
+  console.log("The index of the closest ndoe is", index_of_min);
+  console.log("Client frontend can now contact this ndoe and downlaod cache");
+  res.send(nodes_list[index_of_min]);
 });
 
 app.post("/hello", function(req, res) {
   lru_cache = req.body.cache;
   console.log("updated cache is", lru_cache);
   console.log(lru_cache.type);
+  cache_interval.clearInterval();
+  setCacheInterval();
   res.send(req.body);
 });
 
@@ -130,9 +130,4 @@ app.post("/addnodelocations", function(req, res) {
   nodes_locations;
 });
 
-var server = app.listen(3004, console.log("Listening on port 3000"));
-
-// Setup websocket
-var io = socket(server);
-
-//
+var server = app.listen(3004, console.log("Listening on port 3004"));
